@@ -1,0 +1,186 @@
+================================================================
+  LANGKAH-LANGKAH HOSTING RUANG RAPAT IoT KE PYTHONANYWHERE
+  Project  : ruang-rapatv4 (Flask + Three.js + ESP32)
+  URL      : http://galangmakara.pythonanywhere.com
+  GitHub   : https://github.com/GalangMakara/ruanganiotflask
+================================================================
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  BAGIAN A — UPLOAD KODE KE GITHUB (dari laptop)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Langkah A1 — Buat repo di GitHub
+  - Buka https://github.com dan login
+  - Klik tombol "New" → beri nama repo: ruanganiotflask
+  - Klik "Create repository"
+
+Langkah A2 — Inisialisasi Git di folder project (laptop)
+  Buka terminal di folder ruang-rapatv4, lalu jalankan:
+
+    git init
+    git add .
+    git commit -m "siap deploy ke PythonAnywhere"
+    git branch -M main
+    git remote add origin https://github.com/GalangMakara/ruanganiotflask.git
+    git push -u origin main
+
+  Catatan:
+  - Saat push, akan muncul popup login GitHub → sign in lewat browser
+  - Kalau minta token: buka github.com/settings/tokens → Generate new
+    token (classic) → centang scope "repo" → copy token → paste
+    sebagai password saat push
+  - File myenv/ dan __pycache__/ otomatis diabaikan karena ada .gitignore
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  BAGIAN B — SETUP SERVER DI PYTHONANYWHERE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Langkah B1 — Daftar/Login PythonAnywhere
+  - Buka https://www.pythonanywhere.com
+  - Daftar akun gratis (username = galangmakara)
+  - Domain otomatis: galangmakara.pythonanywhere.com
+
+Langkah B2 — Clone repo & install dependencies
+  Di PythonAnywhere → tab Consoles → klik Bash, lalu jalankan:
+
+    git clone https://github.com/GalangMakara/ruanganiotflask.git ~/ruang-rapatv4
+    mkvirtualenv --python=/usr/bin/python3.13 ruangvenv
+    pip install -r ~/ruang-rapatv4/requirements.txt
+
+  Catatan:
+  - Prompt berubah jadi (ruangvenv)$ setelah mkvirtualenv → virtualenv aktif
+  - Kalau python3.13 tidak tersedia, coba python3.12 (samakan di langkah B4)
+
+Langkah B3 — Buat Web App
+  - Klik tab Web → "Add a new web app"
+  - Pilih: Manual configuration (BUKAN yang "Flask")
+  - Pilih: Python 3.13
+  - Klik Next sampai selesai
+
+Langkah B4 — Set Source Code
+  Di halaman konfigurasi Web App, bagian "Code":
+  - Klik tulisan merah "Enter the path to your web app source code"
+  - Isi: /home/galangmakara/ruang-rapatv4
+  - Tekan Enter
+
+Langkah B5 — Set Virtualenv
+  Di halaman yang sama, bagian "Virtualenv":
+  - Klik area input → ketik: ruangvenv → tekan Enter
+  - Akan expand jadi: /home/galangmakara/.virtualenvs/ruangvenv
+
+Langkah B6 — Edit File WSGI
+  Di bagian "Code", klik link biru file WSGI:
+    /var/www/galangmakara_pythonanywhere_com_wsgi.py
+
+  Hapus SEMUA isi file, lalu paste kode berikut:
+
+    import sys
+
+    project_home = '/home/galangmakara/ruang-rapatv4'
+    if project_home not in sys.path:
+        sys.path.insert(0, project_home)
+
+    from app import app as application  # noqa
+
+  Klik Save (pojok kanan atas editor)
+
+Langkah B7 — Pastikan Force HTTPS = OFF
+  Di tab Web, cari toggle "Force HTTPS" → pastikan MATI (OFF)
+  PENTING: kalau nyala, ESP32 akan error saat kirim data karena
+  urequests MicroPython tidak support redirect ke HTTPS
+
+Langkah B8 — Reload & Test
+  - Klik tombol hijau "Reload galangmakara.pythonanywhere.com"
+  - Buka browser: http://galangmakara.pythonanywhere.com
+  - Dashboard 3D harus tampil dengan status ONLINE
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  BAGIAN C — SETUP ESP32
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Langkah C1 — Konfigurasi file ESP32 (di laptop)
+  Edit esp32/main.py:
+    FLASK_HOST = "http://galangmakara.pythonanywhere.com"
+
+  Edit esp32/boot.py:
+    SSID = "BOE-"   # WiFi kantor BOE, open network tanpa password
+    (gunakan wlan.connect(SSID) tanpa argumen password)
+
+Langkah C2 — Upload ke ESP32
+  - Colok ESP32 ke laptop via kabel USB
+  - Buka Thonny → pilih interpreter MicroPython (ESP32)
+  - Upload esp32/boot.py → simpan sebagai boot.py di ESP32
+  - Upload esp32/main.py → simpan sebagai main.py di ESP32
+  - Klik Stop/Restart atau tekan tombol Reset di ESP32
+
+  Di Thonny shell akan muncul:
+    [WiFi] Terhubung! IP: 192.168.x.x
+    [Main] ESP32 Ruang Rapat siap.
+    [Sensor] Suhu: 27°C  Kelembapan: 60%
+
+Langkah C3 — Deploy ESP32 tanpa laptop
+  - Cabut USB dari laptop
+  - Colok ESP32 ke charger HP (kepala cas) atau power bank
+  - ESP32 otomatis nyalakan boot.py → connect WiFi BOE-
+  - ESP32 otomatis kirim data sensor ke server tiap 3 detik
+  - Laptop tidak diperlukan lagi
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  BAGIAN D — UPDATE KODE (jika ada perubahan)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Langkah D1 — Push perubahan dari laptop
+  Di terminal laptop (folder ruang-rapatv4):
+
+    git add .
+    git commit -m "deskripsi perubahan"
+    git push
+
+Langkah D2 — Pull & reload di PythonAnywhere
+  Di PythonAnywhere → tab Consoles → Bash:
+
+    cd ~/ruang-rapatv4 && git pull
+
+  Lalu klik tab Web → Reload galangmakara.pythonanywhere.com
+
+Langkah D3 — Update kode ESP32
+  - Edit file di laptop
+  - Colok ESP32 ke laptop via USB
+  - Upload ulang lewat Thonny
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  CATATAN PENTING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. LOGIN BULANAN
+   PythonAnywhere free tier menonaktifkan web setelah 1 bulan
+   tanpa login. Login ke pythonanywhere.com lalu klik:
+   "Run until 1 month from today" di tab Web.
+   PythonAnywhere akan kirim email pengingat seminggu sebelumnya.
+
+2. FORCE HTTPS = OFF
+   Selalu pastikan Force HTTPS dalam keadaan MATI di tab Web.
+   ESP32 menggunakan HTTP, bukan HTTPS.
+
+3. WiFi ESP32
+   WiFi yang dipakai ESP32 (BOE-) HARUS punya akses internet
+   agar bisa mengirim data ke pythonanywhere.com.
+
+4. SATU WEB APP GRATIS
+   Akun gratis hanya bisa hosting 1 web app.
+   Untuk lebih dari 1, buat akun baru atau upgrade berbayar.
+
+5. FILE WSGI
+   Jika kode error setelah update, cek error log di:
+   tab Web → Log files → Error log
+
+================================================================
+  STATUS SAAT INI: AKTIF
+  URL    : http://galangmakara.pythonanywhere.com
+  Aktif  : sampai 21 November 2026 (perpanjang tiap bulan)
+================================================================
