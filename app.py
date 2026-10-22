@@ -12,7 +12,10 @@ Endpoint:
 """
 
 from flask import Flask, request, jsonify, send_from_directory
-import os, time, threading
+import math
+import os
+import threading
+import time
 
 # -----------------------------------------------------------------------
 # INISIALISASI
@@ -59,6 +62,25 @@ def cek_alarm(suhu, kelembapan):
     reason = " & ".join(reasons) if reasons else ""
     return alarm, reason
 
+
+def baca_body_json():
+    """Ambil objek JSON; tolak body kosong, JSON rusak, atau tipe non-objek."""
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return None, (jsonify({"error": "Body harus berupa objek JSON yang valid"}), 400)
+    return data, None
+
+
+def angka_sensor(data, nama):
+    """Validasi angka sensor dan cegah NaN/Infinity masuk ke state aplikasi."""
+    value = data.get(nama)
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"'{nama}' harus berupa angka")
+    value = float(value)
+    if not math.isfinite(value):
+        raise ValueError(f"'{nama}' harus berupa angka finite")
+    return value
+
 # -----------------------------------------------------------------------
 # ROUTES — Static Files
 # -----------------------------------------------------------------------
@@ -80,12 +102,16 @@ def terima_sensor():
     Body JSON: { "temperature": float, "humidity": float, "alarm": bool }
     Response : state perangkat aktif (untuk relay ESP32)
     """
-    data = request.get_json(silent=True)
-    if not data:
-        return jsonify({"error": "Body JSON tidak valid"}), 400
+    data, error = baca_body_json()
+    if error:
+        return error
 
-    suhu       = float(data.get("temperature", 0))
-    kelembapan = float(data.get("humidity", 0))
+    try:
+        suhu = angka_sensor(data, "temperature")
+        kelembapan = angka_sensor(data, "humidity")
+    except (TypeError, ValueError, OverflowError) as exc:
+        return jsonify({"error": str(exc)}), 400
+
     alarm, reason = cek_alarm(suhu, kelembapan)
 
     with lock:
@@ -122,16 +148,18 @@ def kontrol_perangkat():
     Body JSON: { "device": "lampu1", "state": true }
     Response : state lengkap semua perangkat
     """
-    data = request.get_json(silent=True)
-    if not data:
-        return jsonify({"error": "Body JSON tidak valid"}), 400
+    data, error = baca_body_json()
+    if error:
+        return error
 
     device = data.get("device")
-    state  = bool(data.get("state"))
+    state = data.get("state")
 
     valid_devices = {"lampu1", "lampu2", "lampu3", "acBos", "acRapat", "layar"}
-    if device not in valid_devices:
+    if not isinstance(device, str) or device not in valid_devices:
         return jsonify({"error": f"Device '{device}' tidak dikenal"}), 400
+    if not isinstance(state, bool):
+        return jsonify({"error": "'state' harus berupa boolean true atau false"}), 400
 
     with lock:
         device_state[device] = state
